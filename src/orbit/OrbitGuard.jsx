@@ -39,6 +39,15 @@ var i = e(n(), 1),
       w: 0.26,
       h: 0.34,
     },
+    {
+      id: `ZONE_C`,
+      label: `ZONE C`,
+      tone: `green`,
+      x: 0.37,
+      y: 0.56,
+      w: 0.26,
+      h: 0.34,
+    },
   ],
   o = [
     {
@@ -1838,7 +1847,7 @@ var yt = `/models/wasm/vision_wasm_internal.js`,
     fps: 0,
     pinch: !1,
     pose: xt,
-    objects: { red: X, yellow: X },
+    objects: { red: X, yellow: X, green: X },
     holding: null,
     simulated: !1,
     hands: [],
@@ -1980,6 +1989,13 @@ function kt(e, t, n = 0) {
                       zone: `MAIN_BOX`,
                       pixels: 400,
                     },
+                    green: {
+                      found: !0,
+                      x: 0.5,
+                      y: 0.35,
+                      zone: `MAIN_BOX`,
+                      pixels: 400,
+                    },
                   },
                 }
               : { ...St, simulated: !0, fps: 60 },
@@ -2006,7 +2022,7 @@ function kt(e, t, n = 0) {
         _ = document.createElement(`canvas`);
       ((_.width = 128), (_.height = 96));
       let v = _.getContext(`2d`, { willReadFrequently: !0 }),
-        y = { red: { track: X, misses: 0 }, yellow: { track: X, misses: 0 } },
+        y = { red: { track: X, misses: 0 }, yellow: { track: X, misses: 0 }, green: { track: X, misses: 0 } },
         b = (e, t) => {
           let n = y[e];
           return t.found
@@ -2060,11 +2076,12 @@ function kt(e, t, n = 0) {
           return { found: !0, x: l, y: u, zone: wt(l, u), pixels: c };
         },
         ee = (e) => {
-          if (!v) return { red: X, yellow: X };
+          if (!v) return { red: X, yellow: X, green: X };
           v.drawImage(e, 0, 0, _.width, _.height);
           let { data: t } = v.getImageData(0, 0, _.width, _.height),
             n = [],
-            r = [];
+            r = [],
+            gq = [];
           for (let e = 0, i = 0; e < t.length; e += 4, i++) {
             let a = t[e],
               o = t[e + 1],
@@ -2089,9 +2106,16 @@ function kt(e, t, n = 0) {
               a - o > 22 &&
               a - s > 22
                 ? n.push([u, d])
-                : p >= 38 && p < 75 && o > s && r.push([u, d]));
+                : p >= 38 && p < 75 && o > s
+                  ? r.push([u, d])
+                  : p >= 90 &&
+                    p < 165 &&
+                    o === c &&
+                    (c - l) / c > 0.3 &&
+                    o - a > 20 &&
+                    gq.push([u, d]));
           }
-          return { red: b(`red`, S(n)), yellow: b(`yellow`, S(r)) };
+          return { red: b(`red`, S(n)), yellow: b(`yellow`, S(r)), green: b(`green`, S(gq)) };
         };
       return (
         (async () => {
@@ -2319,7 +2343,9 @@ function kt(e, t, n = 0) {
                         ? `red`
                         : _(i.yellow, r)
                           ? `yellow`
-                          : null,
+                          : i.green && _(i.green, r)
+                            ? `green`
+                            : null,
                       crew: v(n[0] ?? r),
                     };
                   });
@@ -2545,6 +2571,14 @@ function Mt({
             d?.yellow ?? !1,
             0.57,
           ],
+          [
+            t.objects.green ?? X,
+            o(`green`),
+            `GREEN SAMPLE`,
+            u?.green ?? null,
+            d?.green ?? !1,
+            0.5,
+          ],
         ];
       for (let [e, i, a, o, u, d] of _) {
         let f = g(o),
@@ -2609,7 +2643,7 @@ function Mt({
             n.arc(e.x * l, e.y * p, 3.5, 0, Math.PI * 2),
             n.fill());
       }
-    }, [t, u?.red, u?.yellow, d?.red, d?.yellow, r]));
+    }, [t, u?.red, u?.yellow, u?.green, d?.red, d?.yellow, d?.green, r]));
   let h = (e) => {
     if (r !== `simulated`) return;
     let t = e.currentTarget.getBoundingClientRect();
@@ -3627,11 +3661,71 @@ function nn() {
     z = It(fe, le, L),
     _e = (0, i.useRef)(R);
   _e.current = R;
+  // Optional side task: green sample -> Zone C (added to protocol only after pick)
+  let [gT, sGT] = (0, i.useState)(`idle`),
+    gDw = (0, i.useRef)(0);
+  (0, i.useEffect)(() => {
+    if (!e) {
+      gT !== `idle` && sGT(`idle`);
+      return;
+    }
+    let now = Date.now(),
+      g = R.objects?.green,
+      hands = R.hands ?? [],
+      tip = (h) => h.landmarks?.[8] ?? h.landmarks?.[0],
+      holdingGreen =
+        hands.some((h) => h.holding === `green`) ||
+        R.holding === `green` ||
+        (R.simulated &&
+          g?.found &&
+          hands.some((h) => {
+            let p = tip(h);
+            return p && Math.hypot(p.x - g.x, p.y - g.y) < 0.07;
+          }));
+    if (gT === `idle` && holdingGreen) {
+      sGT(`picked`);
+      gDw.current = 0;
+      let r = now - M.current - k;
+      D((t) => [
+        ...t,
+        Q(r, `step`, `Green sample picked · temporary task added: Place green in Zone C`),
+      ]);
+      ve(`Green sample picked. Place the green sample in zone C.`);
+      return;
+    }
+    if (gT === `picked`) {
+      let inC =
+        g?.zone === `ZONE_C` || hands.some((h) => h.zone === `ZONE_C`) || R.zone === `ZONE_C`;
+      if (inC) {
+        gDw.current ||= now;
+        if (now - gDw.current > 1100) {
+          sGT(`done`);
+          let r = now - M.current - k;
+          D((t) => [...t, Q(r, `step`, `Temporary task completed · Place green in Zone C`)]);
+          ve(`Green sample placed in zone C.`);
+          setTimeout(() => sGT((v) => (v === `done` ? `placed` : v)), 4e3);
+        }
+      } else gDw.current = 0;
+    }
+  }, [R, e, gT]);
   let B = o.find((e) => e.id === C) ?? o[0];
   if (!B) return null;
   let V = B.steps,
     H = V[f.length] ?? null,
     U = (0, i.useMemo)(() => s(f), [f]),
+    VV =
+      gT === `picked` || gT === `done`
+        ? [
+            ...V,
+            {
+              id: `TEMP_PLACE_GREEN`,
+              label: `Place green in Zone C (temporary)`,
+              hint: `Move the green sample to ZONE C`,
+              temp: !0,
+              done: gT === `done`,
+            },
+          ]
+        : V,
     ve = (0, i.useCallback)(
       (e) => {
         if (
@@ -4013,10 +4107,12 @@ function nn() {
                 placed: {
                   red: f.includes(`PLACE_RED`) ? `ZONE_A` : null,
                   yellow: f.includes(`PLACE_YELLOW`) ? `ZONE_B` : null,
+                  green: gT === `done` || gT === `placed` ? `ZONE_C` : null,
                 },
                 picked: {
                   red: f.includes(`PICK_RED`),
                   yellow: f.includes(`PICK_YELLOW`),
+                  green: gT === `picked`,
                 },
               }),
               (0, Y.jsxs)(`section`, {
@@ -4261,8 +4357,12 @@ function nn() {
                   }),
                   (0, Y.jsx)(`ol`, {
                     className: `p-3`,
-                    children: V.map((t, n) => {
-                      let r = f.includes(t.id)
+                    children: VV.map((t, n) => {
+                      let r = t.temp
+                        ? t.done
+                          ? `done`
+                          : `next`
+                        : f.includes(t.id)
                         ? `done`
                         : n === f.length
                           ? `next`
